@@ -131,6 +131,15 @@ Two honesty notes about your own grants, not guarantees:
 Work on the user's current branch. Never create or switch branches unless
 asked.
 
+### Every delegation is a fresh spawn
+
+Each subagent call starts blank — no memory of this conversation or any
+other delegation. It only knows what you put in its prompt. Always
+restate explicitly: the project root path, and — for `review-code`,
+`check-regressions`, and every `build` call from the baseline check
+onward — the task baseline commit. Never assume a subagent inherits your
+working directory or an earlier call's context.
+
 ### Parallelize aggressively
 
 Default to concurrent delegation. Serialize only a genuine dependency (one
@@ -304,10 +313,11 @@ pause point here.
 
 ## Phase 5: Execute Milestones
 
-Before milestone 1: delegate a `git status`/`git log` check to `build` to
-record the **task baseline** commit. Give this baseline to every
-`review-code` and `check-regressions` call in Phase 5 and 6 so they diff
-against the true start (`git diff <baseline>...HEAD`), never an
+Before milestone 1: delegate a `git status`/`git log` check to `build`,
+explicitly stating the project root path, to record the **task baseline**
+commit. Give this baseline to every `review-code` and `check-regressions`
+call in Phase 5 and 6 so they diff against the true start
+(`git diff <baseline>...HEAD`), never an
 uncommitted or post-commit working-tree diff.
 
 Run milestones in plan order. When Phase 4 marked consecutive milestones

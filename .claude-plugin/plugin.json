@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "orchestrate-suite",
+  "version": "1.1.0",
+  "description": "A fully autonomous, checkpoint-configurable task-orchestrator agent that delegates planning, research, implementation, review, and regression checks across seven specialized worker subagents, plus a hostile-review skill and a senior-developer-mode output style.",
+  "author": {
+    "name": "Noah Dommaschk Burwell",
+    "email": "25853855+K-log@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "orchestration",
+    "subagents",
+    "code-review",
+    "multi-agent"
+  ]
+}

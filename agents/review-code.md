@@ -7,7 +7,7 @@ description: >-
   the full task) complete. Read-only — never edits files.
 disallowedTools: Write, Edit
 skills: hostile-review
-model: sonnet
+model: inherit
 color: red
 ---
 

@@ -11,7 +11,7 @@ description: >-
   (confirmed broken: spawns zero subagents in that mode). Resume it with
   the answer to continue.
 tools: Read, Write, Grep, Glob, TaskCreate, TaskGet, TaskList, TaskUpdate, Agent(research, analysis, fetch-details, build, review-code, check-regressions, parallelize-task)
-model: sonnet
+model: inherit
 color: purple
 ---
 
@@ -109,9 +109,9 @@ directly? Stop and delegate instead.
 | Codebase pattern analysis        | `analysis`          | sonnet | needs judgment across files        |
 | Milestone step parallelization   | `parallelize-task`  | haiku  | mechanical regrouping              |
 | Implementation                   | `build`             | sonnet | primary coding workhorse           |
-| Code review                      | `review-code`       | sonnet | end-of-task bug hunting            |
+| Code review                      | `review-code`       | inherit| follows session model             |
 | Regression/lint/test check       | `check-regressions` | sonnet | reasons about tool output          |
-| Orchestration (you)              | —                   | sonnet | cross-phase judgment               |
+| Orchestration (you)              | —                   | inherit| follows session model             |
 
 Your tools permit spawning only these 7 types, plus `Read`/`Write`/`Grep`/
 `Glob` for the plan file and `TaskCreate`/`TaskGet`/`TaskList`/`TaskUpdate`
@@ -178,11 +178,30 @@ Two artifacts, different purposes:
   ## Dependencies, risks & open questions
   ## Validation & extension points
   ## Task progress
+  ## Delegations
   ```
 
   `## Task progress`: `- [ ]` not started, `- [~]` in progress, `- [x]`
   done — `Requirements`, `Research`, `Analysis`, `Plan synthesis`, one per
   milestone, `Final validation`.
+
+  `## Delegations`: a running ledger of every subagent you spawn, so the
+  fan-out and its token cost stay legible. One row per subagent **type**,
+  updated as you go — never drop a row. Record the model each ran on
+  (`inherit` types report as the session model you're running on; the
+  worker types report their pinned model). Format:
+
+  ```markdown
+  | Subagent          | Model   | Calls | Used for                         |
+  | ----------------- | ------- | ----- | -------------------------------- |
+  | analysis          | sonnet  | 2     | auth module, session store       |
+  | build             | sonnet  | 4     | milestones 1-3 + one retry       |
+  | review-code       | <session> | 1   | final full-diff adversarial pass |
+  ```
+
+  Increment `Calls` on every spawn (retries and parallel instances each
+  count as one). This is the source of truth for the delegation summary you
+  print at the end.
 
 - **`TaskCreate`/`TaskUpdate`/`TaskList`** — lightweight mirror for the
   user's `/tasks` view. One task per phase/milestone, moved `in_progress`
@@ -219,7 +238,8 @@ test question if also applicable). Never stop twice.
 
 Once clear, write the plan scaffold (`## Checkpoints` from Phase 0,
 `## Change footprint` = `TBD`, `## Task progress` = `- [~] Requirements`,
-rest `- [ ]`) before Phase 2. Create matching `TaskCreate` entries.
+rest `- [ ]`, `## Delegations` = empty table header) before Phase 2. Create
+matching `TaskCreate` entries.
 
 New/changed requirements later → see **Same-Session Change Handling** at
 the end.
@@ -462,8 +482,11 @@ Mark `- [x] Final validation` only once every required check and both
 final reviews are clean. Otherwise keep `- [~]`/`- [ ]`, record findings,
 stop per rule 5 or proceed only through the permitted retry.
 
-Once done: end with the commit list (hash + message) and any skipped
-Improvements/Nitpicks.
+Once done: end with the commit list (hash + message), any skipped
+Improvements/Nitpicks, and the **delegation summary** — render the plan's
+`## Delegations` table so the caller sees which subagents ran, on which
+model, and how many times. Add a one-line pointer that `/usage` (press `w`)
+shows the same fan-out as a share of quota draw.
 
 ---
 

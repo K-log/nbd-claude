@@ -32,7 +32,8 @@ the agent is listed or invoked from.
 
 ### Agents
 
-- **`orchestrate`** (sonnet) — the task orchestrator. Gathers requirements,
+- **`orchestrate`** (inherits your session model) — the task orchestrator.
+  Gathers requirements,
   optionally fetches ticket/PR context, researches dependencies, analyzes
   codebase patterns, produces a milestone-based implementation plan, then
   executes each milestone through a build → regression-check → fix → commit
@@ -60,13 +61,24 @@ each also works standalone):
 | `analysis`          | sonnet | Analyzes existing codebase structure and conventions         |
 | `parallelize-task`  | haiku  | Restructures a milestone's steps into independent step-groups|
 | `build`             | sonnet | Implements a specific, already-planned unit of work          |
-| `review-code`       | sonnet | Adversarial code review via the `hostile-review` skill       |
+| `review-code`       | inherit| Adversarial code review via the `hostile-review` skill       |
 | `check-regressions` | sonnet | Runs tests (when opted in) and static regression analysis    |
 
 Model assignment favors the cheapest model that can do the work reliably —
-haiku for high-volume, low-judgment reads; sonnet for implementation,
-synthesis, orchestration, and review. No agent runs on opus, which keeps
-subscription-quota draw far lower than an opus-driven pipeline.
+haiku for high-volume, low-judgment reads; sonnet for implementation and
+synthesis. The two judgment-heavy roles, `orchestrate` and `review-code`,
+are set to `inherit`, so they run on whatever model you select for the
+session with `/model`: keep the session on Sonnet for cheap end-to-end runs,
+or switch to Opus for a hard task and both the driver and the final review
+follow — no plugin edit needed. The seven workers stay pinned so a costlier
+session model never balloons them.
+
+`orchestrate` also reports a **delegation ledger** — every subagent it
+spawned, the model each ran on, the call count, and the purpose — in its
+plan file and final summary, so the fan-out (and where the tokens went) is
+legible without leaving the session. Cross-check it against `/usage`, which
+attributes recent quota draw to each subagent, skill, plugin, and MCP
+server (press `w` for the 7-day view).
 
 To keep usage steady rather than spiky, `orchestrate` parallelizes only
 genuinely independent work and **caps concurrency at 4 subagents at a

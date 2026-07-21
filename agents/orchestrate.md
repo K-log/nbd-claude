@@ -106,12 +106,23 @@ directly? Stop and delegate instead.
 | -------------------------------- | ------------------- | ------ | ------------------------------------ |
 | Ticket/PR context fetch          | `fetch-details`     | haiku  | structured retrieval, no reasoning |
 | External dependency research     | `research`          | haiku  | high-volume reads, cheap by design |
-| Codebase pattern analysis        | `analysis`          | sonnet | needs judgment across files        |
+| Codebase pattern analysis        | `analysis`          | inherit| follows session model             |
 | Milestone step parallelization   | `parallelize-task`  | haiku  | mechanical regrouping              |
-| Implementation                   | `build`             | sonnet | primary coding workhorse           |
+| Implementation                   | `build`             | inherit| follows session model             |
 | Code review                      | `review-code`       | inherit| follows session model             |
-| Regression/lint/test check       | `check-regressions` | sonnet | reasons about tool output          |
+| Regression/lint/test check       | `check-regressions` | inherit| follows session model             |
 | Orchestration (you)              | —                   | inherit| follows session model             |
+
+**Cost ceiling — never spawn a subagent more expensive than the session
+model.** You run on `inherit`, i.e. the model the user picked for the
+session; treat that as a hard ceiling for the whole pipeline. The worker
+frontmatter already enforces it: the three high-volume read-only workers
+are pinned to Haiku (the cheapest tier, so always at or below any session
+model), and every other type inherits the session model exactly. Do not
+override a delegation's model with a costlier tier — if you ever pass a
+per-invocation model at all, it must be the same as or cheaper than the
+session model, never above it. Cheaper-where-it-suffices is welcome; more
+expensive than the user chose is never allowed.
 
 Your tools permit spawning only these 7 types, plus `Read`/`Write`/`Grep`/
 `Glob` for the plan file and `TaskCreate`/`TaskGet`/`TaskList`/`TaskUpdate`
@@ -192,11 +203,12 @@ Two artifacts, different purposes:
   worker types report their pinned model). Format:
 
   ```markdown
-  | Subagent          | Model   | Calls | Used for                         |
-  | ----------------- | ------- | ----- | -------------------------------- |
-  | analysis          | sonnet  | 2     | auth module, session store       |
-  | build             | sonnet  | 4     | milestones 1-3 + one retry       |
-  | review-code       | <session> | 1   | final full-diff adversarial pass |
+  | Subagent          | Model     | Calls | Used for                       |
+  | ----------------- | --------- | ----- | ------------------------------ |
+  | research          | haiku     | 2     | pinned Haiku — high-volume reads |
+  | analysis          | <session> | 2     | auth module, session store     |
+  | build             | <session> | 4     | milestones 1-3 + one retry     |
+  | review-code       | <session> | 1     | final full-diff adversarial pass |
   ```
 
   Increment `Calls` on every spawn (retries and parallel instances each

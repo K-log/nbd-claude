@@ -6,7 +6,7 @@ description: >-
   Use only when the orchestrator delegates concrete, scoped implementation
   steps — not for open-ended feature requests.
 disallowedTools: Agent
-model: sonnet
+model: inherit
 color: green
 ---
 

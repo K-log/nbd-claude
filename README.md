@@ -58,20 +58,25 @@ each also works standalone):
 | ------------------- | ------ | ------------------------------------------------------------ |
 | `fetch-details`     | haiku  | Fetches and summarizes ticket/PR context                     |
 | `research`          | haiku  | Researches external dependencies, libraries, APIs            |
-| `analysis`          | sonnet | Analyzes existing codebase structure and conventions         |
+| `analysis`          | inherit| Analyzes existing codebase structure and conventions         |
 | `parallelize-task`  | haiku  | Restructures a milestone's steps into independent step-groups|
-| `build`             | sonnet | Implements a specific, already-planned unit of work          |
+| `build`             | inherit| Implements a specific, already-planned unit of work          |
 | `review-code`       | inherit| Adversarial code review via the `hostile-review` skill       |
-| `check-regressions` | sonnet | Runs tests (when opted in) and static regression analysis    |
+| `check-regressions` | inherit| Runs tests (when opted in) and static regression analysis    |
 
-Model assignment favors the cheapest model that can do the work reliably —
-haiku for high-volume, low-judgment reads; sonnet for implementation and
-synthesis. The two judgment-heavy roles, `orchestrate` and `review-code`,
-are set to `inherit`, so they run on whatever model you select for the
-session with `/model`: keep the session on Sonnet for cheap end-to-end runs,
-or switch to Opus for a hard task and both the driver and the final review
-follow — no plugin edit needed. The seven workers stay pinned so a costlier
-session model never balloons them.
+**No subagent ever runs on a model more expensive than the one you pick for
+the session** with `/model` — that's the design invariant. It falls out of
+two rules: the three high-volume read-only workers (`fetch-details`,
+`research`, `parallelize-task`) are pinned to **Haiku**, the cheapest tier,
+so they're always at or below your session model *and* keep their discount
+whenever you're on something pricier; everything else — `orchestrate`,
+`analysis`, `build`, `review-code`, `check-regressions` — is set to
+**`inherit`**, so it runs on exactly the session model, never above it.
+
+The upshot is a single dial: run the session on **Haiku** and the whole
+pipeline is Haiku; on **Sonnet** for balanced cost/quality; on **Opus** for
+a hard task and the driver, analysis, build, and final review all follow —
+no plugin edit, and never a surprise upcharge past your choice.
 
 `orchestrate` also reports a **delegation ledger** — every subagent it
 spawned, the model each ran on, the call count, and the purpose — in its

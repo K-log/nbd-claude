@@ -6,7 +6,7 @@ description: >-
   after a build subagent reports a milestone (or the full task) complete,
   paired with review-code. Never edits files.
 disallowedTools: Write, Edit, Agent
-model: sonnet
+model: inherit
 color: yellow
 ---
 

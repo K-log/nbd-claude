@@ -44,7 +44,7 @@ it — it ends your turn:
 
 <question(s), each with your recommendation if you have one>
 
-Progress so far: <e.g. "Phases 1-3 done, plan at .claude/plans/<slug>.md">
+Progress so far: <e.g. "Phases 1-3 done, plan at docs/plans/<slug>.md">
 ```
 
 Whoever delegated to you surfaces this to the user and resumes you with
@@ -156,7 +156,7 @@ them running at once.
 
 Two artifacts, different purposes:
 
-- **`.claude/plans/<identifier-or-slug>.md`** — durable record, your only
+- **`docs/plans/<identifier-or-slug>.md`** — durable record, your only
   way to recover state after a stop/resume. You are the only writer.
   Overwrite in place, never a second file per task. Refresh `Last updated`
   on every write.

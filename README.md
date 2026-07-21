@@ -84,6 +84,18 @@ than one at a time, by default.
   something destructive, irreversible, or genuinely ambiguous; verifies with
   the project's formatter/linter/type-checker/tests before reporting done.
 
+### Hooks
+
+- **`approve-plan-writes`** (`PreToolUse`) — auto-approves `Write`/`Edit`
+  calls that target the orchestrator's own plan file (`docs/plans/*.md`)
+  so its per-phase bookkeeping never prompts for permission. The plan file
+  is a durable record the `orchestrate` agent overwrites on every phase;
+  approving those writes removes the one prompt the plugin generates on
+  itself without touching how any application file is handled — every other
+  `Write`/`Edit` still goes through the normal permission flow. The hook
+  degrades to the normal prompt if `jq` is unavailable or the payload can't
+  be parsed, so it can only ever remove a prompt, never block a write.
+
 ## Installation
 
 ### From the marketplace

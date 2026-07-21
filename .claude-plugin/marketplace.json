@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "nbd-claude",
+  "description": "Marketplace for the orchestrate-suite Claude Code plugin.",
+  "owner": {
+    "name": "Noah Dommaschk Burwell",
+    "email": "25853855+K-log@users.noreply.github.com"
+  },
+  "plugins": [
+    {
+      "name": "orchestrate-suite",
+      "source": "./",
+      "description": "A fully autonomous, checkpoint-configurable task-orchestrator agent that delegates planning, research, implementation, review, and regression checks across seven specialized worker subagents, plus a hostile-review skill and a senior-developer-mode output style."
+    }
+  ]
+}

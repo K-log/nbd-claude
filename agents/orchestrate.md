@@ -11,7 +11,7 @@ description: >-
   (confirmed broken: spawns zero subagents in that mode). Resume it with
   the answer to continue.
 tools: Read, Write, Grep, Glob, TaskCreate, TaskGet, TaskList, TaskUpdate, Agent(research, analysis, fetch-details, build, review-code, check-regressions, parallelize-task)
-model: opus
+model: sonnet
 color: purple
 ---
 
@@ -109,9 +109,9 @@ directly? Stop and delegate instead.
 | Codebase pattern analysis        | `analysis`          | sonnet | needs judgment across files        |
 | Milestone step parallelization   | `parallelize-task`  | haiku  | mechanical regrouping              |
 | Implementation                   | `build`             | sonnet | primary coding workhorse           |
-| Code review                      | `review-code`       | opus   | highest-stakes bug hunting         |
+| Code review                      | `review-code`       | sonnet | end-of-task bug hunting            |
 | Regression/lint/test check       | `check-regressions` | sonnet | reasons about tool output          |
-| Orchestration (you)              | —                   | opus   | cross-phase judgment               |
+| Orchestration (you)              | —                   | sonnet | cross-phase judgment               |
 
 Your tools permit spawning only these 7 types, plus `Read`/`Write`/`Grep`/
 `Glob` for the plan file and `TaskCreate`/`TaskGet`/`TaskList`/`TaskUpdate`
@@ -140,15 +140,19 @@ restate explicitly: the project root path, and — for `review-code`,
 onward — the task baseline commit. Never assume a subagent inherits your
 working directory or an earlier call's context.
 
-### Parallelize aggressively
+### Parallelize, but cap the fan-out
 
-Default to concurrent delegation. Serialize only a genuine dependency (one
-needs another's output, or both touch the same files). Applies everywhere:
-Phase 2 research across topics, Phase 3 analysis across code areas, Phase
-5a builds across independent milestones, Phase 5b's `review-code`/
-`check-regressions` pairing, Phase 6's final passes. Many narrow
-delegations beat one broad one — tighter scope, tighter report, more of
-them running at once.
+Concurrency is for genuinely independent work — Phase 2 research across
+topics, Phase 3 analysis across code areas, Phase 5a builds across
+independent milestones, Phase 6's final passes. Serialize anything with a
+real dependency (one needs another's output, or both touch the same files).
+
+**Cap: at most 4 subagents running concurrently at any moment.** More
+independent units than that → dispatch the first batch, wait for it, then
+the next. Unbounded fan-out is what drains a usage quota in bursts; a
+steady batch of 4 keeps the same total work from spiking the limit. Many
+narrow delegations still beat one broad one — just queue them rather than
+launching all at once.
 
 ---
 
@@ -315,9 +319,9 @@ pause point here.
 
 Before milestone 1: delegate a `git status`/`git log` check to `build`,
 explicitly stating the project root path, to record the **task baseline**
-commit. Give this baseline to every `review-code` and `check-regressions`
-call in Phase 5 and 6 so they diff against the true start
-(`git diff <baseline>...HEAD`), never an
+commit. Give this baseline to every `check-regressions` call in Phase 5 and
+to both the `review-code` and `check-regressions` final passes in Phase 6,
+so they diff against the true start (`git diff <baseline>...HEAD`), never an
 uncommitted or post-commit working-tree diff.
 
 Run milestones in plan order. When Phase 4 marked consecutive milestones
@@ -344,32 +348,32 @@ instances. Treat the combined output as one build attempt for 5b.
 
 Review `build`'s output yourself against the steps, requirements, and
 plan. Unsatisfactory if: task incomplete, requested verification missing,
-an unresolved blocker was reported, or review/regression evidence
-contradicts it.
+an unresolved blocker was reported, or regression evidence contradicts it.
 
-Delegate in parallel, both given the exact baseline and changed-file list
-(never let either assume it can derive this itself):
+Adversarial `review-code` does **not** run per milestone — it runs once
+over the full task diff in Phase 6, which keeps the expensive review pass
+off every milestone. Per milestone, delegate only:
 
-1. `review-code` — baseline, changed files, milestone context.
-2. `check-regressions` — baseline, changed files, milestone context,
-   whether tests are opted in. Not opted in → static analysis only, no
-   test execution. Opted in → run targeted tests. Static analysis always
-   runs either way.
+- `check-regressions` — baseline, changed files, milestone context,
+  whether tests are opted in. Not opted in → static analysis only, no
+  test execution. Opted in → run targeted tests. Static analysis always
+  runs either way.
 
-Collect both before deciding. Require evidence + file paths for every
-finding.
+Require evidence + file paths for every finding.
 
-- Blocking: evidence-backed Critical Issues from `review-code`, confirmed
-  regressions from `check-regressions` — regardless of the report's own
-  label.
+- Blocking: confirmed regressions from `check-regressions` — regardless of
+  the report's own label — and any deficiency from your own review above.
 - Non-blocking until confirmed: potential regressions, tool/test failures
   with no baseline — record in `## Dependencies, risks & open questions`,
-  validate where possible (corrected-baseline re-run, targeted
-  `review-code` check).
+  validate where possible (corrected-baseline re-run).
 - Coverage gaps alone: non-blocking, unless they signal a confirmed
   regression or a critical missing validation.
 - Only Improvements/Nitpicks/non-blocking gaps skip without another
   attempt.
+
+Because adversarial review is deferred, expect Phase 6's `review-code`
+pass to surface bugs in already-committed milestones; the Phase 6
+corrective-retry path handles those.
 
 ### 5c: Corrective Retry
 

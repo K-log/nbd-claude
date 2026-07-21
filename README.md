@@ -32,10 +32,12 @@ the agent is listed or invoked from.
 
 ### Agents
 
-- **`orchestrate`** (opus) — the task orchestrator. Gathers requirements,
+- **`orchestrate`** (sonnet) — the task orchestrator. Gathers requirements,
   optionally fetches ticket/PR context, researches dependencies, analyzes
   codebase patterns, produces a milestone-based implementation plan, then
-  executes each milestone through a build → review → fix → commit loop.
+  executes each milestone through a build → regression-check → fix → commit
+  loop, with the adversarial `review-code` pass deferred to a single
+  end-of-task review.
   Has no `AskUserQuestion` tool by design — see above — so it stops with a
   `## Decision needed` block whenever a human decision is required.
   Fully autonomous by default: it opens every run with a multi-select
@@ -58,16 +60,21 @@ each also works standalone):
 | `analysis`          | sonnet | Analyzes existing codebase structure and conventions         |
 | `parallelize-task`  | haiku  | Restructures a milestone's steps into independent step-groups|
 | `build`             | sonnet | Implements a specific, already-planned unit of work          |
-| `review-code`       | opus   | Adversarial code review via the `hostile-review` skill       |
+| `review-code`       | sonnet | Adversarial code review via the `hostile-review` skill       |
 | `check-regressions` | sonnet | Runs tests (when opted in) and static regression analysis    |
 
 Model assignment favors the cheapest model that can do the work reliably —
-haiku for high-volume, low-judgment reads; sonnet for implementation and
-synthesis; opus reserved for orchestration and adversarial review, where
-the cost of a missed bug or a bad plan outweighs the cost of the model.
-`orchestrate` also parallelizes aggressively: independent research topics,
-analysis areas, milestones, and review passes all run concurrently rather
-than one at a time, by default.
+haiku for high-volume, low-judgment reads; sonnet for implementation,
+synthesis, orchestration, and review. No agent runs on opus, which keeps
+subscription-quota draw far lower than an opus-driven pipeline.
+
+To keep usage steady rather than spiky, `orchestrate` parallelizes only
+genuinely independent work and **caps concurrency at 4 subagents at a
+time**, queuing the rest; the `hostile-review` skill applies the same
+batch-of-4 cap to its per-finding verification subagents. The adversarial
+`review-code` pass runs **once over the full task diff at the end** instead
+of on every milestone — the per-milestone loop keeps the cheaper
+`check-regressions` static/regression check to catch breakage early.
 
 ### Skills
 

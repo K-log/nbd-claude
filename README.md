@@ -86,14 +86,24 @@ than one at a time, by default.
 
 ## Installation
 
-Add this repository as a plugin source and enable it, or load it directly
-for local development:
+### From the marketplace
+
+Add this repository as a plugin marketplace, then install the plugin:
+
+```
+/plugin marketplace add k-log/nbd-claude
+/plugin install orchestrate-suite@nbd-claude
+```
+
+### Local development
+
+Alternatively, load the plugin directly from a local checkout:
 
 ```
 claude --plugin-dir .
 ```
 
-Validate the manifest at any time with:
+Validate the manifests at any time with:
 
 ```
 claude plugin validate .

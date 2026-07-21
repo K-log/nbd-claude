@@ -6,7 +6,7 @@ description: >-
   Use only when the orchestrator delegates concrete, scoped implementation
   steps — not for open-ended feature requests.
 disallowedTools: Agent
-model: sonnet
+model: inherit
 color: green
 ---
 
@@ -28,7 +28,7 @@ and you are not responsible for planning it.
 
 ## Rules
 
-- **Never edit the canonical plan file** (`.claude/plans/*.md`). You may
+- **Never edit the canonical plan file** (`docs/plans/*.md`). You may
   read it for context. Reporting what you changed is your job; owning the
   plan document is not.
 - Implement only the assigned steps. Don't add unrelated cleanup,

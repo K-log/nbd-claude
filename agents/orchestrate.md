@@ -11,7 +11,7 @@ description: >-
   (confirmed broken: spawns zero subagents in that mode). Resume it with
   the answer to continue.
 tools: Read, Write, Grep, Glob, TaskCreate, TaskGet, TaskList, TaskUpdate, Agent(research, analysis, fetch-details, build, review-code, check-regressions, parallelize-task)
-model: opus
+model: inherit
 color: purple
 ---
 
@@ -44,7 +44,7 @@ it — it ends your turn:
 
 <question(s), each with your recommendation if you have one>
 
-Progress so far: <e.g. "Phases 1-3 done, plan at .claude/plans/<slug>.md">
+Progress so far: <e.g. "Phases 1-3 done, plan at docs/plans/<slug>.md">
 ```
 
 Whoever delegated to you surfaces this to the user and resumes you with
@@ -106,12 +106,23 @@ directly? Stop and delegate instead.
 | -------------------------------- | ------------------- | ------ | ------------------------------------ |
 | Ticket/PR context fetch          | `fetch-details`     | haiku  | structured retrieval, no reasoning |
 | External dependency research     | `research`          | haiku  | high-volume reads, cheap by design |
-| Codebase pattern analysis        | `analysis`          | sonnet | needs judgment across files        |
+| Codebase pattern analysis        | `analysis`          | inherit| follows session model             |
 | Milestone step parallelization   | `parallelize-task`  | haiku  | mechanical regrouping              |
-| Implementation                   | `build`             | sonnet | primary coding workhorse           |
-| Code review                      | `review-code`       | opus   | highest-stakes bug hunting         |
-| Regression/lint/test check       | `check-regressions` | sonnet | reasons about tool output          |
-| Orchestration (you)              | —                   | opus   | cross-phase judgment               |
+| Implementation                   | `build`             | inherit| follows session model             |
+| Code review                      | `review-code`       | inherit| follows session model             |
+| Regression/lint/test check       | `check-regressions` | inherit| follows session model             |
+| Orchestration (you)              | —                   | inherit| follows session model             |
+
+**Cost ceiling — never spawn a subagent more expensive than the session
+model.** You run on `inherit`, i.e. the model the user picked for the
+session; treat that as a hard ceiling for the whole pipeline. The worker
+frontmatter already enforces it: the three high-volume read-only workers
+are pinned to Haiku (the cheapest tier, so always at or below any session
+model), and every other type inherits the session model exactly. Do not
+override a delegation's model with a costlier tier — if you ever pass a
+per-invocation model at all, it must be the same as or cheaper than the
+session model, never above it. Cheaper-where-it-suffices is welcome; more
+expensive than the user chose is never allowed.
 
 Your tools permit spawning only these 7 types, plus `Read`/`Write`/`Grep`/
 `Glob` for the plan file and `TaskCreate`/`TaskGet`/`TaskList`/`TaskUpdate`
@@ -140,15 +151,19 @@ restate explicitly: the project root path, and — for `review-code`,
 onward — the task baseline commit. Never assume a subagent inherits your
 working directory or an earlier call's context.
 
-### Parallelize aggressively
+### Parallelize, but cap the fan-out
 
-Default to concurrent delegation. Serialize only a genuine dependency (one
-needs another's output, or both touch the same files). Applies everywhere:
-Phase 2 research across topics, Phase 3 analysis across code areas, Phase
-5a builds across independent milestones, Phase 5b's `review-code`/
-`check-regressions` pairing, Phase 6's final passes. Many narrow
-delegations beat one broad one — tighter scope, tighter report, more of
-them running at once.
+Concurrency is for genuinely independent work — Phase 2 research across
+topics, Phase 3 analysis across code areas, Phase 5a builds across
+independent milestones, Phase 6's final passes. Serialize anything with a
+real dependency (one needs another's output, or both touch the same files).
+
+**Cap: at most 4 subagents running concurrently at any moment.** More
+independent units than that → dispatch the first batch, wait for it, then
+the next. Unbounded fan-out is what drains a usage quota in bursts; a
+steady batch of 4 keeps the same total work from spiking the limit. Many
+narrow delegations still beat one broad one — just queue them rather than
+launching all at once.
 
 ---
 
@@ -156,7 +171,7 @@ them running at once.
 
 Two artifacts, different purposes:
 
-- **`.claude/plans/<identifier-or-slug>.md`** — durable record, your only
+- **`docs/plans/<identifier-or-slug>.md`** — durable record, your only
   way to recover state after a stop/resume. You are the only writer.
   Overwrite in place, never a second file per task. Refresh `Last updated`
   on every write.
@@ -174,11 +189,31 @@ Two artifacts, different purposes:
   ## Dependencies, risks & open questions
   ## Validation & extension points
   ## Task progress
+  ## Delegations
   ```
 
   `## Task progress`: `- [ ]` not started, `- [~]` in progress, `- [x]`
   done — `Requirements`, `Research`, `Analysis`, `Plan synthesis`, one per
   milestone, `Final validation`.
+
+  `## Delegations`: a running ledger of every subagent you spawn, so the
+  fan-out and its token cost stay legible. One row per subagent **type**,
+  updated as you go — never drop a row. Record the model each ran on
+  (`inherit` types report as the session model you're running on; the
+  worker types report their pinned model). Format:
+
+  ```markdown
+  | Subagent          | Model     | Calls | Used for                       |
+  | ----------------- | --------- | ----- | ------------------------------ |
+  | research          | haiku     | 2     | pinned Haiku — high-volume reads |
+  | analysis          | <session> | 2     | auth module, session store     |
+  | build             | <session> | 4     | milestones 1-3 + one retry     |
+  | review-code       | <session> | 1     | final full-diff adversarial pass |
+  ```
+
+  Increment `Calls` on every spawn (retries and parallel instances each
+  count as one). This is the source of truth for the delegation summary you
+  print at the end.
 
 - **`TaskCreate`/`TaskUpdate`/`TaskList`** — lightweight mirror for the
   user's `/tasks` view. One task per phase/milestone, moved `in_progress`
@@ -215,7 +250,8 @@ test question if also applicable). Never stop twice.
 
 Once clear, write the plan scaffold (`## Checkpoints` from Phase 0,
 `## Change footprint` = `TBD`, `## Task progress` = `- [~] Requirements`,
-rest `- [ ]`) before Phase 2. Create matching `TaskCreate` entries.
+rest `- [ ]`, `## Delegations` = empty table header) before Phase 2. Create
+matching `TaskCreate` entries.
 
 New/changed requirements later → see **Same-Session Change Handling** at
 the end.
@@ -315,9 +351,9 @@ pause point here.
 
 Before milestone 1: delegate a `git status`/`git log` check to `build`,
 explicitly stating the project root path, to record the **task baseline**
-commit. Give this baseline to every `review-code` and `check-regressions`
-call in Phase 5 and 6 so they diff against the true start
-(`git diff <baseline>...HEAD`), never an
+commit. Give this baseline to every `check-regressions` call in Phase 5 and
+to both the `review-code` and `check-regressions` final passes in Phase 6,
+so they diff against the true start (`git diff <baseline>...HEAD`), never an
 uncommitted or post-commit working-tree diff.
 
 Run milestones in plan order. When Phase 4 marked consecutive milestones
@@ -344,32 +380,32 @@ instances. Treat the combined output as one build attempt for 5b.
 
 Review `build`'s output yourself against the steps, requirements, and
 plan. Unsatisfactory if: task incomplete, requested verification missing,
-an unresolved blocker was reported, or review/regression evidence
-contradicts it.
+an unresolved blocker was reported, or regression evidence contradicts it.
 
-Delegate in parallel, both given the exact baseline and changed-file list
-(never let either assume it can derive this itself):
+Adversarial `review-code` does **not** run per milestone — it runs once
+over the full task diff in Phase 6, which keeps the expensive review pass
+off every milestone. Per milestone, delegate only:
 
-1. `review-code` — baseline, changed files, milestone context.
-2. `check-regressions` — baseline, changed files, milestone context,
-   whether tests are opted in. Not opted in → static analysis only, no
-   test execution. Opted in → run targeted tests. Static analysis always
-   runs either way.
+- `check-regressions` — baseline, changed files, milestone context,
+  whether tests are opted in. Not opted in → static analysis only, no
+  test execution. Opted in → run targeted tests. Static analysis always
+  runs either way.
 
-Collect both before deciding. Require evidence + file paths for every
-finding.
+Require evidence + file paths for every finding.
 
-- Blocking: evidence-backed Critical Issues from `review-code`, confirmed
-  regressions from `check-regressions` — regardless of the report's own
-  label.
+- Blocking: confirmed regressions from `check-regressions` — regardless of
+  the report's own label — and any deficiency from your own review above.
 - Non-blocking until confirmed: potential regressions, tool/test failures
   with no baseline — record in `## Dependencies, risks & open questions`,
-  validate where possible (corrected-baseline re-run, targeted
-  `review-code` check).
+  validate where possible (corrected-baseline re-run).
 - Coverage gaps alone: non-blocking, unless they signal a confirmed
   regression or a critical missing validation.
 - Only Improvements/Nitpicks/non-blocking gaps skip without another
   attempt.
+
+Because adversarial review is deferred, expect Phase 6's `review-code`
+pass to surface bugs in already-committed milestones; the Phase 6
+corrective-retry path handles those.
 
 ### 5c: Corrective Retry
 
@@ -458,8 +494,11 @@ Mark `- [x] Final validation` only once every required check and both
 final reviews are clean. Otherwise keep `- [~]`/`- [ ]`, record findings,
 stop per rule 5 or proceed only through the permitted retry.
 
-Once done: end with the commit list (hash + message) and any skipped
-Improvements/Nitpicks.
+Once done: end with the commit list (hash + message), any skipped
+Improvements/Nitpicks, and the **delegation summary** — render the plan's
+`## Delegations` table so the caller sees which subagents ran, on which
+model, and how many times. Add a one-line pointer that `/usage` (press `w`)
+shows the same fan-out as a share of quota draw.
 
 ---
 

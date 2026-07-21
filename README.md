@@ -32,10 +32,13 @@ the agent is listed or invoked from.
 
 ### Agents
 
-- **`orchestrate`** (opus) — the task orchestrator. Gathers requirements,
+- **`orchestrate`** (inherits your session model) — the task orchestrator.
+  Gathers requirements,
   optionally fetches ticket/PR context, researches dependencies, analyzes
   codebase patterns, produces a milestone-based implementation plan, then
-  executes each milestone through a build → review → fix → commit loop.
+  executes each milestone through a build → regression-check → fix → commit
+  loop, with the adversarial `review-code` pass deferred to a single
+  end-of-task review.
   Has no `AskUserQuestion` tool by design — see above — so it stops with a
   `## Decision needed` block whenever a human decision is required.
   Fully autonomous by default: it opens every run with a multi-select
@@ -55,19 +58,40 @@ each also works standalone):
 | ------------------- | ------ | ------------------------------------------------------------ |
 | `fetch-details`     | haiku  | Fetches and summarizes ticket/PR context                     |
 | `research`          | haiku  | Researches external dependencies, libraries, APIs            |
-| `analysis`          | sonnet | Analyzes existing codebase structure and conventions         |
+| `analysis`          | inherit| Analyzes existing codebase structure and conventions         |
 | `parallelize-task`  | haiku  | Restructures a milestone's steps into independent step-groups|
-| `build`             | sonnet | Implements a specific, already-planned unit of work          |
-| `review-code`       | opus   | Adversarial code review via the `hostile-review` skill       |
-| `check-regressions` | sonnet | Runs tests (when opted in) and static regression analysis    |
+| `build`             | inherit| Implements a specific, already-planned unit of work          |
+| `review-code`       | inherit| Adversarial code review via the `hostile-review` skill       |
+| `check-regressions` | inherit| Runs tests (when opted in) and static regression analysis    |
 
-Model assignment favors the cheapest model that can do the work reliably —
-haiku for high-volume, low-judgment reads; sonnet for implementation and
-synthesis; opus reserved for orchestration and adversarial review, where
-the cost of a missed bug or a bad plan outweighs the cost of the model.
-`orchestrate` also parallelizes aggressively: independent research topics,
-analysis areas, milestones, and review passes all run concurrently rather
-than one at a time, by default.
+**No subagent ever runs on a model more expensive than the one you pick for
+the session** with `/model` — that's the design invariant. It falls out of
+two rules: the three high-volume read-only workers (`fetch-details`,
+`research`, `parallelize-task`) are pinned to **Haiku**, the cheapest tier,
+so they're always at or below your session model *and* keep their discount
+whenever you're on something pricier; everything else — `orchestrate`,
+`analysis`, `build`, `review-code`, `check-regressions` — is set to
+**`inherit`**, so it runs on exactly the session model, never above it.
+
+The upshot is a single dial: run the session on **Haiku** and the whole
+pipeline is Haiku; on **Sonnet** for balanced cost/quality; on **Opus** for
+a hard task and the driver, analysis, build, and final review all follow —
+no plugin edit, and never a surprise upcharge past your choice.
+
+`orchestrate` also reports a **delegation ledger** — every subagent it
+spawned, the model each ran on, the call count, and the purpose — in its
+plan file and final summary, so the fan-out (and where the tokens went) is
+legible without leaving the session. Cross-check it against `/usage`, which
+attributes recent quota draw to each subagent, skill, plugin, and MCP
+server (press `w` for the 7-day view).
+
+To keep usage steady rather than spiky, `orchestrate` parallelizes only
+genuinely independent work and **caps concurrency at 4 subagents at a
+time**, queuing the rest; the `hostile-review` skill applies the same
+batch-of-4 cap to its per-finding verification subagents. The adversarial
+`review-code` pass runs **once over the full task diff at the end** instead
+of on every milestone — the per-milestone loop keeps the cheaper
+`check-regressions` static/regression check to catch breakage early.
 
 ### Skills
 
@@ -83,6 +107,18 @@ than one at a time, by default.
   philosophy: concise, no-emoji communication; asks only when blocked by
   something destructive, irreversible, or genuinely ambiguous; verifies with
   the project's formatter/linter/type-checker/tests before reporting done.
+
+### Hooks
+
+- **`approve-plan-writes`** (`PreToolUse`) — auto-approves `Write`/`Edit`
+  calls that target the orchestrator's own plan file (`docs/plans/*.md`)
+  so its per-phase bookkeeping never prompts for permission. The plan file
+  is a durable record the `orchestrate` agent overwrites on every phase;
+  approving those writes removes the one prompt the plugin generates on
+  itself without touching how any application file is handled — every other
+  `Write`/`Edit` still goes through the normal permission flow. The hook
+  degrades to the normal prompt if `jq` is unavailable or the payload can't
+  be parsed, so it can only ever remove a prompt, never block a write.
 
 ## Installation
 

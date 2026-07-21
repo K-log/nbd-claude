@@ -87,8 +87,11 @@ re-derives the same conclusion by reading the code path that command would
 exercise, and states plainly that it verified by inspection rather than
 execution.
 
-Findings are independent — dispatch all of them in a single message so they
-run in parallel.
+Findings are independent, so verify them in parallel — but cap the fan-out
+at 4 verification subagents at a time. More than 4 findings → dispatch the
+first 4 in one message, wait for them, then the next batch. Unbounded
+per-finding fan-out is what spikes usage on a review with many findings; a
+steady batch of 4 does the same work without the burst.
 
 **Output:**
 

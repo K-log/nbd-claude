@@ -6,7 +6,7 @@ description: >-
   is organized before planning changes. Read-only — never edits files or
   runs commands.
 disallowedTools: Write, Edit, Bash, Agent, WebSearch, WebFetch
-model: sonnet
+model: inherit
 color: cyan
 ---
 

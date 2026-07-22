@@ -62,9 +62,14 @@ prompt. Match the existing files exactly when adding or editing one:
   you touch it.
 - Tool grants — `orchestrate` uses an allowlist `tools:` line (including a
   scoped `Agent(research, analysis, ...)` grant naming exactly the 7
-  workers); workers use `disallowedTools:` to remove capabilities. Read-only
-  workers deny `Write, Edit, Bash, Agent`; review/regression workers deny
-  `Write, Edit`. Keep the least-privilege pattern.
+  workers); workers use `disallowedTools:` to remove capabilities. Keep the
+  least-privilege pattern each worker already sets:
+  - `research`, `fetch-details` deny `Write, Edit, Bash, Agent`.
+  - `analysis`, `parallelize-task` deny those **plus** `WebSearch, WebFetch`.
+  - `review-code` denies `Write, Edit`; `check-regressions` denies
+    `Write, Edit, Agent`.
+  - `build` denies only `Agent` (it needs `Bash`/`Write`/`Edit` to
+    implement and commit).
 - `color` — set per existing convention (cyan = read-only worker, green =
   build, red = review, yellow = regressions, purple = orchestrator).
 

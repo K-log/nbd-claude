@@ -2,18 +2,19 @@
 name: hostile-review
 description: >-
   Adversarial code review that hunts for real, verifiable bugs, then
-  verifies each finding with a fresh neutral subagent before reporting. Use
-  when asked to review a diff, PR, file, directory, or git ref for concrete
-  defects rather than style opinions. Triggers on "hostile review",
-  "adversarial review", "hunt for bugs", or when the `review-code` agent
-  needs its two-pass review methodology.
+  independently re-verifies each finding before reporting. Use when asked to
+  review a diff, PR, file, directory, or git ref for concrete defects rather
+  than style opinions. Triggers on "hostile review", "adversarial review",
+  "hunt for bugs", or when the `orchestrate` agent needs its two-pass review
+  methodology.
 ---
 
 Arguments (`args`, if provided): optional file(s), directory, glob, or diff
 ref to scope the review.
 
 This is a read-only review. Do not edit, fix, or modify any files — only
-report findings.
+report findings. This runs entirely in one agent: you hunt, then you turn
+the hostile framing off and re-verify your own findings. No subagents.
 
 **Resolve scope:**
 
@@ -39,7 +40,7 @@ report findings.
    `AskUserQuestion` tool (e.g. delegated to as a subagent), report the
    ambiguity as an unresolved question instead of guessing.
 
-**Pass 1 — Hostile review (you):**
+**Pass 1 — Hostile review:**
 
 Treat this code as some of the worst you've seen. Assume it is broken and do
 not extend good faith. You are hunting concrete bugs, not style opinions.
@@ -61,48 +62,32 @@ not extend good faith. You are hunting concrete bugs, not style opinions.
    one-sentence description of the concrete failure mode, and the evidence
    that proves it.
 
-**Pass 2 — Neutral verification (subagent):**
+**Pass 2 — Neutral re-verification:**
 
-For each Pass 1 finding, dispatch a fresh, independent subagent (Agent tool,
-subagent type `Explore`). It is read-only by design — Write/Edit are denied
-at the tool level, so the "no edits" constraint is structural here, not just
-an instruction. It must have no memory of the "worst code" framing above.
-Give it only:
+Now drop the "worst code you've seen" framing entirely. For each Pass 1
+finding, re-approach it cold, as a neutral reviewer with no stake in whether
+the bug is real. Phrase each as a hypothesis to check — "Determine whether X
+actually occurs at file:line" — and re-read the referenced code from
+scratch, tracing the exact logic path, rather than trusting your Pass 1
+conclusion. Deliberately try to disprove each finding; a bug you can't
+re-confirm on a fresh reading is a false positive, not a bug.
 
-- The file(s) and line range in question.
-- The claimed defect, phrased as a neutral hypothesis to check: "Determine
-  whether X actually occurs at file:line. Do not assume it is real — verify
-  by re-reading the referenced code and tracing the exact logic path."
-- Instructions to return: confirmed / partially confirmed / disputed, its
-  supporting evidence (the traced code path, not just an opinion), and —
-  only if confirmed or partially confirmed — a severity: `critical` (crash,
-  data loss, security), `high` (wrong behavior on a common path), `medium`
-  (wrong behavior on an edge case), `low` (real but cosmetic/maintainability
-  only).
-
-This subagent type has no command-execution access, so it cannot re-run a
-linter/type-checker/test that Pass 1 used as evidence. It verifies by code
-inspection only — if Pass 1's evidence was a command run, the neutral agent
-re-derives the same conclusion by reading the code path that command would
-exercise, and states plainly that it verified by inspection rather than
-execution.
-
-Findings are independent, so verify them in parallel — but cap the fan-out
-at 4 verification subagents at a time. More than 4 findings → dispatch the
-first 4 in one message, wait for them, then the next batch. Unbounded
-per-finding fan-out is what spikes usage on a review with many findings; a
-steady batch of 4 does the same work without the burst.
+For each finding, settle on: confirmed / partially confirmed / disputed, the
+supporting evidence (the traced code path, not an opinion), and — only if
+confirmed or partially confirmed — a severity: `critical` (crash, data loss,
+security), `high` (wrong behavior on a common path), `medium` (wrong
+behavior on an edge case), `low` (real but cosmetic/maintainability only).
 
 **Output:**
 
-Present every Pass 1 finding in one markdown table, including ones the
-neutral pass disputed:
+Present every Pass 1 finding in one markdown table, including ones Pass 2
+disputed:
 
-| Severity | File:Line | Issue | Evidence | Neutral Verdict |
-| -------- | --------- | ----- | -------- | --------------- |
+| Severity | File:Line | Issue | Evidence | Verdict |
+| -------- | --------- | ----- | -------- | ------- |
 
-- `Neutral Verdict` always states the verdict word (`Confirmed`, `Partially
-  confirmed`, or `Disputed`) followed by the agent's reasoning.
+- `Verdict` always states the word (`Confirmed`, `Partially confirmed`, or
+  `Disputed`) followed by the Pass 2 reasoning.
 - Confirmed and partially confirmed findings sort together, ordered by
   severity (critical → high → medium → low); disputed findings sort last.
 - For disputed findings, set `Severity` to `Disputed`.

@@ -8,10 +8,10 @@ skill and a senior-developer-mode output style.
 ## Design: one long-running agent, not a fan-out
 
 `orchestrate` does the whole job itself — research, codebase analysis,
-implementation, review, regression checks, and commits — in a single
-agent that runs as long as the task needs. It deliberately does **not**
-spin up worker subagents or parallelize work across many short-lived
-spawns.
+implementation, in-process review, regression checks, and commits — in a
+single agent that runs as long as the task needs. It deliberately does
+**not** spin up worker subagents or parallelize work across many
+short-lived spawns.
 
 The reason is cost and predictability. A hundred short subagents, each
 re-reading the same files and re-deriving the same context from a cold
@@ -20,8 +20,19 @@ straight through spends its tokens on the task. Running for an hour — or
 three — is fine; the plan file is its durable memory, so it doesn't
 re-research what it already knows across a stop and resume.
 
-There is no concurrency to manage, no fan-out cap, and no delegation
-ledger to reconcile. Milestones run in order, one at a time.
+There is one deliberate exception. The **final adversarial review** runs
+`hostile-review`'s two-pass methodology once over the whole task diff at
+the very end: the agent hunts for bugs itself, then fans out a fresh,
+independent verification subagent per finding (capped at four at a time) to
+re-check each one cold. A reviewer with no memory of writing the code is
+the strongest guard against both false positives and self-marking, so that
+one pass is worth the spawns. Every other review — the per-milestone
+self-review and regression check during the build loop — stays
+single-agent.
+
+Apart from that final verification, there is no concurrency to manage, no
+fan-out cap to reason about, and no delegation ledger to reconcile.
+Milestones run in order, one at a time.
 
 ## Components
 
@@ -32,8 +43,9 @@ ledger to reconcile. Milestones run in order, one at a time.
   dependencies, analyzes codebase patterns, produces a milestone-based
   implementation plan, then executes each milestone through a build →
   regression-check → fix → commit loop, with the adversarial
-  `hostile-review` pass deferred to a single end-of-task review — all in
-  one agent.
+  `hostile-review` pass deferred to a single end-of-task review —
+  everything in one agent except that final review's per-finding
+  verification, which fans out fresh subagents once at the end.
 
   Has no `AskUserQuestion` tool, so it never asks interactively; instead it
   stops with a `## Decision needed` block whenever a human decision is
@@ -47,23 +59,25 @@ ledger to reconcile. Milestones run in order, one at a time.
   tersely by design — plain words, `file:line` facts over prose, no
   filler.
 
-Because everything runs in one agent, **the whole task runs on exactly the
+Because the main agent runs the whole pipeline, **the task runs on the
 session model** you pick with `/model` — never above it, never a surprise
 upcharge. Run the session on **Haiku** for a cheap pass, **Sonnet** for
 balanced cost/quality, or **Opus** for a hard task; the driver, the
-building, and the final review all follow that one dial with no plugin
-edit. Cross-check spend with `/usage` (press `w` for the 7-day view),
-which attributes recent quota draw to each session, skill, plugin, and MCP
+building, and the final review's bug-hunt all follow that one dial with no
+plugin edit. The only work outside it is the short-lived `Explore`
+verification subagents in the final review, which run read-only and once.
+Cross-check spend with `/usage` (press `w` for the 7-day view), which
+attributes recent quota draw to each session, skill, plugin, and MCP
 server.
 
 ### Skills
 
 - **`hostile-review`** — adversarial two-pass code review: a hostile Pass 1
-  hunts for concrete, evidence-backed defects, then the agent drops the
-  hostile framing and independently re-verifies each finding cold in Pass 2
-  before anything is reported — all in one agent, no verification
-  subagents. Used by the `orchestrate` agent for its final review, and
-  available standalone for reviewing a diff, PR, file, directory, or git
+  hunts for concrete, evidence-backed defects, then a fresh neutral
+  subagent independently verifies each finding in Pass 2 (batched four at a
+  time) before anything is reported. Used by the `orchestrate` agent for
+  its final review, and available standalone for reviewing a diff, PR,
+  file, directory, or git
   ref.
 
 ### Output styles

@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "orchestrate-suite",
-  "version": "2.0.0",
-  "description": "A fully autonomous, checkpoint-configurable task-orchestrator agent that plans, researches, implements, reviews, and commits any ticket, bug, or feature end to end in a single long-running agent — no worker-subagent fan-out — plus a hostile-review skill and a senior-developer-mode output style.",
+  "version": "2.1.0",
+  "description": "A fully autonomous, checkpoint-configurable task-orchestrator agent that plans, researches, implements, reviews, and commits any ticket, bug, or feature end to end in a single long-running agent — the only fan-out is the final hostile-review verification, run once at the end — plus a hostile-review skill and a senior-developer-mode output style.",
   "author": {
     "name": "Noah Dommaschk Burwell",
     "email": "25853855+K-log@users.noreply.github.com"

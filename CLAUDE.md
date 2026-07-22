@@ -11,9 +11,10 @@ runner, and no runtime dependency to install.
 single-plugin marketplace (`nbd-claude`). It ships:
 
 - a single long-running **`orchestrate`** task-orchestrator agent that
-  drives a ticket/bug/feature from plan to committed code entirely by
-  itself — research, analysis, implementation, review, and regression
-  checks all inline, with no worker subagents and no fan-out,
+  drives a ticket/bug/feature from plan to committed code almost entirely
+  by itself — research, analysis, implementation, in-process review, and
+  regression checks all inline; the only fan-out is the final
+  hostile-review verification, run once at the end,
 - a **`hostile-review`** adversarial code-review skill,
 - a **`senior-developer-mode`** output style,
 - a **`approve-plan-writes`** PreToolUse hook.
@@ -26,15 +27,21 @@ authoritative narrative and update it whenever behavior changes.
 The load-bearing design choice is that `orchestrate` is a **single agent
 that does all the work itself** and runs as long as the task takes. It
 must not spawn worker subagents, parallelize across spawns, or otherwise
-fan work out — that is precisely the token-churn the redesign removed. When
-editing:
+fan work out — that is precisely the token-churn the redesign removed.
+There is exactly **one deliberate exception**: the Phase 6 `hostile-review`
+pass fans out fresh `Explore` subagents to verify its findings, run once
+over the full diff at the very end. When editing:
 
-- `orchestrate` has **no `Agent` tool** and grants no nested `Agent(...)`
-  scope. Do not add one. If a change seems to want delegation, it belongs
-  inline in the agent instead.
+- `orchestrate`'s only `Agent` grant is **`Agent(Explore)`**, and it exists
+  solely for the final `hostile-review` verification. Do not broaden it to
+  other subagent types, and do not use it for any other phase. Every
+  in-process review (Phase 5b) stays single-agent. If a change seems to
+  want delegation elsewhere, it belongs inline in the agent instead.
 - Milestones run **sequentially**, one at a time. Do not reintroduce a
-  concurrency cap, a delegation ledger, or a `## Delegations` plan-file
-  section — those concepts are gone by design.
+  build/analysis concurrency cap, a delegation ledger, or a
+  `## Delegations` plan-file section — those concepts are gone by design.
+  The only fan-out anywhere is the hostile-review verification, which the
+  skill itself caps at 4 subagents at a time.
 - The whole task runs on the **session model** (`orchestrate` is
   `model: inherit`); there are no cheaper pinned workers to balance against
   anymore. Keep it `inherit`.
@@ -67,13 +74,14 @@ prompt:
 
 - `name` — must equal the filename stem (`orchestrate`).
 - `description` — block scalar (`>-`), third person, states when to use the
-  agent. It carries the "single long-running agent, no subagents" framing
-  and the "no `AskUserQuestion`" note; keep those accurate if behavior
-  changes.
+  agent. It carries the "single long-running agent; the only fan-out is the
+  final hostile-review verification" framing and the "no `AskUserQuestion`"
+  note; keep those accurate if behavior changes.
 - `tools` — an allowlist giving the agent everything it needs to do the
   work itself: `Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch`
-  plus the `TaskCreate/TaskGet/TaskList/TaskUpdate` progress mirror. It
-  deliberately has **no `Agent` tool**.
+  plus the `TaskCreate/TaskGet/TaskList/TaskUpdate` progress mirror. Its
+  only delegation grant is **`Agent(Explore)`**, scoped for the final
+  `hostile-review` verification alone — no other subagent type.
 - `skills: hostile-review` — the agent uses the skill for its final review.
 - `model: inherit` — always. See the design invariant above.
 - `color: purple`.
@@ -83,8 +91,10 @@ prompt:
 `agents/orchestrate.md` is the largest and most important file. Its design
 contracts, any of which is easy to break with a careless edit:
 
-- **Does everything itself in one session** — no worker subagents. See the
-  design invariant above; this is the whole point of the plugin.
+- **Does everything itself in one session** — every phase and every
+  in-process review is single-agent. The lone exception is the Phase 6
+  `hostile-review` verification fan-out. See the design invariant above;
+  this is the whole point of the plugin.
 - **No `AskUserQuestion` tool** — the orchestrator cannot ask
   interactively (Claude Code strips that tool from Agent-tool subagents,
   and the `## Decision needed` block works regardless of how it's invoked).
@@ -97,7 +107,8 @@ contracts, any of which is easy to break with a careless edit:
   only durable state across stop/resume. The template section headings in
   the agent body are a contract with the resume logic — don't rename them.
 - The adversarial `hostile-review` pass runs **once** over the full task
-  diff in Phase 6, not per milestone.
+  diff in Phase 6, not per milestone, and its per-finding verification is
+  the only place subagents (`Explore`) are spawned.
 
 ## Hook
 

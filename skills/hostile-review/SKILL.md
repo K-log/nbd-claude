@@ -13,8 +13,11 @@ Arguments (`args`, if provided): optional file(s), directory, glob, or diff
 ref to scope the review.
 
 This is a read-only review. Do not edit, fix, or modify any files — only
-report findings. This runs entirely in one agent: you hunt, then you turn
-the hostile framing off and re-verify your own findings. No subagents.
+report findings. Pass 1 is a single-agent hostile hunt; Pass 2 dispatches a
+fresh neutral subagent per finding for independent verification. This
+per-finding fan-out is deliberate — a reviewer with no memory of the
+hostile framing is the strongest check against false positives — and it is
+meant to run once over the full scope, not repeatedly.
 
 **Resolve scope:**
 
@@ -62,32 +65,54 @@ not extend good faith. You are hunting concrete bugs, not style opinions.
    one-sentence description of the concrete failure mode, and the evidence
    that proves it.
 
-**Pass 2 — Neutral re-verification:**
+**Pass 2 — Neutral verification (subagents):**
 
-Now drop the "worst code you've seen" framing entirely. For each Pass 1
-finding, re-approach it cold, as a neutral reviewer with no stake in whether
-the bug is real. Phrase each as a hypothesis to check — "Determine whether X
-actually occurs at file:line" — and re-read the referenced code from
-scratch, tracing the exact logic path, rather than trusting your Pass 1
-conclusion. Deliberately try to disprove each finding; a bug you can't
-re-confirm on a fresh reading is a false positive, not a bug.
+For each Pass 1 finding, dispatch a fresh, independent subagent (Agent tool,
+subagent type `Explore`). It is read-only by design — Write/Edit are denied
+at the tool level, so the "no edits" constraint is structural here, not just
+an instruction. It must have no memory of the "worst code" framing above.
+Give it only:
 
-For each finding, settle on: confirmed / partially confirmed / disputed, the
-supporting evidence (the traced code path, not an opinion), and — only if
-confirmed or partially confirmed — a severity: `critical` (crash, data loss,
-security), `high` (wrong behavior on a common path), `medium` (wrong
-behavior on an edge case), `low` (real but cosmetic/maintainability only).
+- The file(s) and line range in question.
+- The claimed defect, phrased as a neutral hypothesis to check: "Determine
+  whether X actually occurs at file:line. Do not assume it is real — verify
+  by re-reading the referenced code and tracing the exact logic path."
+- Instructions to return: confirmed / partially confirmed / disputed, its
+  supporting evidence (the traced code path, not just an opinion), and —
+  only if confirmed or partially confirmed — a severity: `critical` (crash,
+  data loss, security), `high` (wrong behavior on a common path), `medium`
+  (wrong behavior on an edge case), `low` (real but cosmetic/maintainability
+  only).
+
+This subagent type has no command-execution access, so it cannot re-run a
+linter/type-checker/test that Pass 1 used as evidence. It verifies by code
+inspection only — if Pass 1's evidence was a command run, the neutral agent
+re-derives the same conclusion by reading the code path that command would
+exercise, and states plainly that it verified by inspection rather than
+execution.
+
+Findings are independent, so verify them in parallel — but cap the fan-out
+at 4 verification subagents at a time. More than 4 findings → dispatch the
+first 4 in one message, wait for them, then the next batch. This is the only
+fan-out in the workflow and it runs once, so the batch cap keeps even a
+finding-heavy review from spiking usage in a burst.
+
+If invoked from a context with no `Agent` tool (so `Explore` subagents
+can't be dispatched), fall back to verifying each finding yourself: drop the
+hostile framing, re-read each referenced code path cold as a neutral
+reviewer trying to disprove the finding, and record the same
+confirmed/partially confirmed/disputed verdict, severity, and evidence.
 
 **Output:**
 
-Present every Pass 1 finding in one markdown table, including ones Pass 2
-disputed:
+Present every Pass 1 finding in one markdown table, including ones the
+neutral pass disputed:
 
-| Severity | File:Line | Issue | Evidence | Verdict |
-| -------- | --------- | ----- | -------- | ------- |
+| Severity | File:Line | Issue | Evidence | Neutral Verdict |
+| -------- | --------- | ----- | -------- | --------------- |
 
-- `Verdict` always states the word (`Confirmed`, `Partially confirmed`, or
-  `Disputed`) followed by the Pass 2 reasoning.
+- `Neutral Verdict` always states the verdict word (`Confirmed`, `Partially
+  confirmed`, or `Disputed`) followed by the verifier's reasoning.
 - Confirmed and partially confirmed findings sort together, ordered by
   severity (critical → high → medium → low); disputed findings sort last.
 - For disputed findings, set `Severity` to `Disputed`.
